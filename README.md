@@ -1,2 +1,2 @@
 # pai-one
-PAI° ONE — Paycheck Intelligence System
+PAI° ONE — Paycheck Intelligence System 
