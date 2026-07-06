@@ -1,3 +1,7 @@
+// PAI° ONE — AI Chat Proxy
+// Securely proxies requests to Anthropic API, keeping the key server-side
+// BLAINK° Technologies LLC
+
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
