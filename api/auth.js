@@ -1,11 +1,57 @@
 // PAI° ONE — Auth API
-// Handles signup and signin server-side
 // BLAINK° Technologies LLC
 
+const https = require("https");
+
+function httpsPost(url, headers, body) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const parsed = new URL(url);
+    const options = {
+      hostname: parsed.hostname,
+      path: parsed.pathname + parsed.search,
+      method: "POST",
+      headers: { ...headers, "Content-Length": Buffer.byteLength(data) },
+    };
+    const req = https.request(options, (res) => {
+      let raw = "";
+      res.on("data", (chunk) => raw += chunk);
+      res.on("end", () => {
+        try { resolve({ status: res.statusCode, data: JSON.parse(raw) }); }
+        catch(e) { resolve({ status: res.statusCode, data: { error: raw } }); }
+      });
+    });
+    req.on("error", reject);
+    req.write(data);
+    req.end();
+  });
+}
+
+function httpsGet(url, headers) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const options = {
+      hostname: parsed.hostname,
+      path: parsed.pathname + parsed.search,
+      method: "GET",
+      headers,
+    };
+    const req = https.request(options, (res) => {
+      let raw = "";
+      res.on("data", (chunk) => raw += chunk);
+      res.on("end", () => {
+        try { resolve({ status: res.statusCode, data: JSON.parse(raw) }); }
+        catch(e) { resolve({ status: res.statusCode, data: { error: raw } }); }
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
 module.exports = async function handler(req, res) {
-  // Allow GET for testing
   if (req.method === "GET") {
-    return res.status(200).json({ status: "Auth API is running" });
+    return res.status(200).json({ status: "Auth API running" });
   }
 
   if (req.method !== "POST") {
@@ -16,88 +62,46 @@ module.exports = async function handler(req, res) {
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return res.status(500).json({
-      error: "Supabase not configured",
-      hasUrl: !!SUPABASE_URL,
-      hasKey: !!SUPABASE_ANON_KEY
-    });
+    return res.status(500).json({ error: "Supabase not configured" });
   }
 
-  // Parse body safely
   let body = req.body;
   if (typeof body === "string") {
     try { body = JSON.parse(body); } catch(e) {
-      return res.status(400).json({ error: "Invalid JSON body" });
+      return res.status(400).json({ error: "Invalid JSON" });
     }
   }
 
   const { action, email, password, token } = body || {};
 
-  if (!action) {
-    return res.status(400).json({ error: "Missing action field" });
-  }
-
   try {
-    // SIGN UP
     if (action === "signup") {
-      const r = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await r.json();
-      return res.status(r.status).json(data);
+      const h = { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY };
+      const r = await httpsPost(`${SUPABASE_URL}/auth/v1/signup`, h, { email, password });
+      return res.status(r.status).json(r.data);
     }
 
-    // SIGN IN
     if (action === "signin") {
-      const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await r.json();
-      return res.status(r.status).json(data);
+      const h = { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY };
+      const r = await httpsPost(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, h, { email, password });
+      return res.status(r.status).json(r.data);
     }
 
-    // SIGN OUT
     if (action === "signout") {
-      await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      const h = { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` };
+      await httpsPost(`${SUPABASE_URL}/auth/v1/logout`, h, {});
       return res.status(200).json({ success: true });
     }
 
-    // GET USER
     if (action === "getuser") {
-      const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-        headers: {
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-      const data = await r.json();
-      return res.status(r.status).json(data);
+      const h = { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}` };
+      const r = await httpsGet(`${SUPABASE_URL}/auth/v1/user`, h);
+      return res.status(r.status).json(r.data);
     }
 
     return res.status(400).json({ error: `Unknown action: ${action}` });
 
   } catch (err) {
-    return res.status(500).json({
-      error: "Auth request failed",
-      detail: String(err),
-      action
-    });
+    return res.status(500).json({ error: "Request failed", detail: String(err) });
   }
 };
